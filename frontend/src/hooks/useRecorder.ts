@@ -57,6 +57,7 @@ export function useRecorder(
   const chunkIdxRef = useRef(0);
   const startTimeRef = useRef(0);
   const pausedElapsedRef = useRef(0);
+  const stateRef = useRef<"idle" | "recording" | "paused">("idle");
 
   // Clean up on unmount
   useEffect(() => {
@@ -148,10 +149,44 @@ export function useRecorder(
       chunkIdxRef.current = 0;
       pausedElapsedRef.current = 0;
 
+      // Collect all data for the current segment
+      let segmentBlobs: Blob[] = [];
+      
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
-          onChunk(e.data, chunkIdxRef.current);
+          segmentBlobs.push(e.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        // When recorder stops (either manually or via restart), emit the complete chunk
+        if (segmentBlobs.length > 0) {
+          const completeChunk = new Blob(segmentBlobs, { type: recorder.mimeType || "audio/webm" });
+          onChunk(completeChunk, chunkIdxRef.current);
           chunkIdxRef.current += 1;
+          segmentBlobs = [];
+        }
+
+        // Auto-restart if still in recording state (chunk rotation)
+        if (streamRef.current && stateRef.current === "recording") {
+          const newRecorder = new MediaRecorder(streamRef.current, {
+            mimeType: mimeType || undefined,
+            audioBitsPerSecond: 64_000,
+          });
+          recorderRef.current = newRecorder;
+          segmentBlobs = [];
+          
+          newRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) segmentBlobs.push(e.data);
+          };
+          newRecorder.onstop = recorder.onstop;
+          newRecorder.onerror = recorder.onerror;
+          newRecorder.start();
+          
+          // Schedule next stop
+          setTimeout(() => {
+            if (newRecorder.state === "recording") newRecorder.stop();
+          }, chunkIntervalMs);
         }
       };
 
@@ -160,12 +195,19 @@ export function useRecorder(
         stopTimer();
       };
 
-      recorder.start(chunkIntervalMs);
+      // Start recording — will stop after chunkIntervalMs to create a complete file
+      recorder.start();
+      setTimeout(() => {
+        if (recorder.state === "recording") recorder.stop();
+      }, chunkIntervalMs);
+      
+      stateRef.current = "recording";
       setState({ status: "recording", elapsed: 0, error: null });
       startTimer();
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Audio access denied";
+      stateRef.current = "idle";
       setState({ status: "idle", elapsed: 0, error: msg });
     }
   }, [onChunk, chunkIntervalMs, audioSource, startTimer, stopTimer]);
@@ -184,6 +226,7 @@ export function useRecorder(
       const audioCtx = (stream as any)._audioCtx as AudioContext | undefined;
       audioCtx?.close();
     }
+    stateRef.current = "idle";
     stopTimer();
     setState((s) => ({ ...s, status: "idle" }));
   }, [stopTimer]);

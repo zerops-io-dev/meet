@@ -163,12 +163,17 @@ app.post("/transcribe", async (c) => {
   }
 
   try {
-    // Build form for Whisper
+    // Build form for Whisper — re-create FormData to ensure compatibility
+    const fileBlob = file as unknown as Blob;
+    const fileName = (file as unknown as { name?: string }).name || "audio.webm";
+    
     const whisperForm = new FormData();
-    whisperForm.append("file", file, (file as unknown as { name: string }).name || "audio.webm");
+    whisperForm.append("file", new Blob([await fileBlob.arrayBuffer()], { type: fileBlob.type || "audio/webm" }), fileName);
     if (language && typeof language === "string") {
       whisperForm.append("language", language);
     }
+
+    console.log(`[transcribe] Forwarding ${fileName} (${fileBlob.size} bytes, type=${fileBlob.type}) to Whisper`);
 
     const whisperRes = await fetch(
       `${c.env.WHISPER_URL}/transcribe`,
@@ -181,6 +186,7 @@ app.post("/transcribe", async (c) => {
 
     if (!whisperRes.ok) {
       const errText = await whisperRes.text();
+      console.error(`[transcribe] Whisper error ${whisperRes.status}: ${errText}`);
       return c.json(
         {
           error: "Whisper transcription failed",
