@@ -7,6 +7,7 @@ import { cors } from "hono/cors";
 
 interface Env {
   WHISPER_URL: string;
+  WHISPER_API_KEY: string;
   CLAUDE_MODEL: string;
   ALLOWED_ORIGIN: string;
   ANTHROPIC_API_KEY: string;
@@ -173,6 +174,7 @@ app.post("/transcribe", async (c) => {
       `${c.env.WHISPER_URL}/transcribe`,
       {
         method: "POST",
+        headers: { "x-api-key": c.env.WHISPER_API_KEY },
         body: whisperForm,
       },
     );

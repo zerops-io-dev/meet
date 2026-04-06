@@ -5,8 +5,10 @@ import tempfile
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from faster_whisper import WhisperModel
 
 # Config
@@ -14,6 +16,7 @@ MODEL_SIZE = os.getenv("WHISPER_MODEL", "large-v3")
 DEVICE = os.getenv("WHISPER_DEVICE", "cuda")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "float16")
 PORT = int(os.getenv("PORT", "8787"))
+API_KEY = os.getenv("WHISPER_API_KEY", "zrps_wh_k8x2mP9vLqR4nT6wJ3yF5hB7dA0cE1gS")
 
 model: WhisperModel | None = None
 
@@ -32,6 +35,24 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Zerops Whisper", lifespan=lifespan)
 
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """Require API key on all routes except /health."""
+
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path == "/health" and request.method == "GET":
+            return await call_next(request)
+
+        auth = request.headers.get("x-api-key") or request.headers.get(
+            "authorization", ""
+        ).replace("Bearer ", "")
+        if auth != API_KEY:
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+        return await call_next(request)
+
+
+app.add_middleware(AuthMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

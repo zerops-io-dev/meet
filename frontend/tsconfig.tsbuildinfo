@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/BulletBlock.tsx","./src/components/FinalSummary.tsx","./src/components/LiveTranscript.tsx","./src/components/MeetingHistory.tsx","./src/components/RecordButton.tsx","./src/components/SettingsModal.tsx","./src/hooks/useMeetingAI.ts","./src/hooks/useRecorder.ts"],"version":"5.9.3"}
