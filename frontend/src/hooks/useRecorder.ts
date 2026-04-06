@@ -8,6 +8,7 @@ export interface RecorderState {
 
 export interface UseRecorderReturn {
   state: RecorderState;
+  stream: MediaStream | null;
   start: () => Promise<void>;
   stop: () => void;
   pause: () => void;
@@ -250,5 +251,5 @@ export function useRecorder(
     }
   }, [startTimer]);
 
-  return { state, start, stop, pause, resume };
+  return { state, stream: streamRef.current, start, stop, pause, resume };
 }

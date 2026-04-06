@@ -4,6 +4,7 @@ import { useRecorder, type AudioSource } from "./hooks/useRecorder";
 import { useMeetingAI } from "./hooks/useMeetingAI";
 import type { MeetingSettings } from "./hooks/useMeetingAI";
 import RecordButton from "./components/RecordButton";
+import AudioVisualizer from "./components/AudioVisualizer";
 import LiveTranscript from "./components/LiveTranscript";
 import BulletBlock from "./components/BulletBlock";
 import FinalSummary from "./components/FinalSummary";
@@ -190,6 +191,12 @@ export default function App() {
                 onStop={handleStop}
                 onPause={recorder.pause}
                 onResume={recorder.resume}
+              />
+
+              <AudioVisualizer
+                stream={recorder.stream}
+                isActive={recorder.state.status === "recording" || recorder.state.status === "paused"}
+                isPaused={recorder.state.status === "paused"}
               />
 
               {/* New meeting button (when idle with data) */}
