@@ -1,0 +1,15 @@
+{
+  "name": "zerops-meet",
+  "private": true,
+  "workspaces": ["frontend", "worker"],
+  "scripts": {
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:worker": "npm run dev -w worker",
+    "build:frontend": "npm run build -w frontend",
+    "build:worker": "npm run build -w worker",
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:worker\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
