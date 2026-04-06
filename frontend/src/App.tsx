@@ -15,7 +15,7 @@ import SettingsModal from "./components/SettingsModal";
 const DEFAULT_SETTINGS: MeetingSettings = {
   blockSize: 6,
   language: "auto" as const,
-  workerUrl: import.meta.env.DEV ? "/api" : "https://api-meet.zerops.io",
+  workerUrl: import.meta.env.DEV ? "/api" : "https://zerops-meet-api.lucas-i-carrizo.workers.dev",
 };
 
 export default function App() {
