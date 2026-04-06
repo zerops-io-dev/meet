@@ -29,13 +29,21 @@ function pickMime(): string {
   return "";
 }
 
+export type AudioSource = "microphone" | "system" | "both";
+
 /**
- * Hook that records audio from the microphone and emits a Blob every
+ * Hook that records audio and emits a Blob every
  * `chunkIntervalMs` milliseconds (default 30 s).
+ *
+ * Sources:
+ * - "microphone": captures mic only (getUserMedia)
+ * - "system": captures system/tab audio only (getDisplayMedia)
+ * - "both": mixes mic + system audio together (ideal for meetings)
  */
 export function useRecorder(
   onChunk: (blob: Blob, chunkIndex: number) => void,
   chunkIntervalMs = 30_000,
+  audioSource: AudioSource = "both",
 ): UseRecorderReturn {
   const [state, setState] = useState<RecorderState>({
     status: "idle",
@@ -78,11 +86,61 @@ export function useRecorder(
 
   const start = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
+      let finalStream: MediaStream;
+
+      if (audioSource === "microphone") {
+        // Mic only
+        finalStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      } else if (audioSource === "system") {
+        // System audio only — user picks a tab/screen to share
+        const displayStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true, // required by browser, we'll discard it
+          audio: true, // this captures system/tab audio
+        });
+        // Remove video tracks — we only want audio
+        displayStream.getVideoTracks().forEach((t) => t.stop());
+        const audioTracks = displayStream.getAudioTracks();
+        if (audioTracks.length === 0) {
+          throw new Error("No system audio captured. Make sure to check 'Share audio' when selecting a tab.");
+        }
+        finalStream = new MediaStream(audioTracks);
+      } else {
+        // Both: mix mic + system audio
+        const [micStream, displayStream] = await Promise.all([
+          navigator.mediaDevices.getUserMedia({ audio: true }),
+          navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true,
+          }),
+        ]);
+        // Remove video tracks
+        displayStream.getVideoTracks().forEach((t) => t.stop());
+        const systemAudioTracks = displayStream.getAudioTracks();
+
+        if (systemAudioTracks.length === 0) {
+          // Fallback to mic only if user didn't share audio
+          micStream.getTracks().forEach(() => {}); // keep mic
+          finalStream = micStream;
+        } else {
+          // Mix both streams using AudioContext
+          const audioCtx = new AudioContext();
+          const dest = audioCtx.createMediaStreamDestination();
+          const micSource = audioCtx.createMediaStreamSource(micStream);
+          const sysSource = audioCtx.createMediaStreamSource(new MediaStream(systemAudioTracks));
+          micSource.connect(dest);
+          sysSource.connect(dest);
+          finalStream = dest.stream;
+
+          // Store references for cleanup
+          (finalStream as any)._extraStreams = [micStream, displayStream];
+          (finalStream as any)._audioCtx = audioCtx;
+        }
+      }
+
+      streamRef.current = finalStream;
 
       const mimeType = pickMime();
-      const recorder = new MediaRecorder(stream, {
+      const recorder = new MediaRecorder(finalStream, {
         mimeType: mimeType || undefined,
         audioBitsPerSecond: 64_000,
       });
@@ -107,17 +165,25 @@ export function useRecorder(
       startTimer();
     } catch (err) {
       const msg =
-        err instanceof Error ? err.message : "Microphone access denied";
+        err instanceof Error ? err.message : "Audio access denied";
       setState({ status: "idle", elapsed: 0, error: msg });
     }
-  }, [onChunk, chunkIntervalMs, startTimer, stopTimer]);
+  }, [onChunk, chunkIntervalMs, audioSource, startTimer, stopTimer]);
 
   const stop = useCallback(() => {
     const recorder = recorderRef.current;
     if (recorder && recorder.state !== "inactive") {
       recorder.stop();
     }
-    streamRef.current?.getTracks().forEach((t) => t.stop());
+    const stream = streamRef.current;
+    if (stream) {
+      stream.getTracks().forEach((t) => t.stop());
+      // Clean up extra streams from "both" mode
+      const extras = (stream as any)._extraStreams as MediaStream[] | undefined;
+      extras?.forEach((s) => s.getTracks().forEach((t) => t.stop()));
+      const audioCtx = (stream as any)._audioCtx as AudioContext | undefined;
+      audioCtx?.close();
+    }
     stopTimer();
     setState((s) => ({ ...s, status: "idle" }));
   }, [stopTimer]);

@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { History, Settings, Globe } from "lucide-react";
-import { useRecorder } from "./hooks/useRecorder";
+import { useRecorder, type AudioSource } from "./hooks/useRecorder";
 import { useMeetingAI } from "./hooks/useMeetingAI";
 import type { MeetingSettings } from "./hooks/useMeetingAI";
 import RecordButton from "./components/RecordButton";
@@ -34,7 +34,8 @@ export default function App() {
     [transcribeChunk],
   );
 
-  const recorder = useRecorder(onChunk, 30_000);
+  const [audioSource, setAudioSource] = useState<AudioSource>("both");
+  const recorder = useRecorder(onChunk, 30_000, audioSource);
 
   const handleStop = useCallback(async () => {
     recorder.stop();
@@ -160,6 +161,29 @@ export default function App() {
           <div className="lg:col-span-3 space-y-6">
             {/* Record controls */}
             <div className="glass-card p-8 flex flex-col items-center">
+              {/* Audio source selector */}
+              {recorder.state.status === "idle" && (
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="text-xs text-gray-400 mr-2">Audio:</span>
+                  {([
+                    { key: "microphone" as AudioSource, label: "Mic", icon: "🎙️" },
+                    { key: "system" as AudioSource, label: "System", icon: "🖥️" },
+                    { key: "both" as AudioSource, label: "Both", icon: "🎙️+🖥️" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setAudioSource(opt.key)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        audioSource === opt.key
+                          ? "bg-accent-500 text-white"
+                          : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                      }`}
+                    >
+                      {opt.icon} {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <RecordButton
                 state={recorder.state}
                 onStart={recorder.start}
